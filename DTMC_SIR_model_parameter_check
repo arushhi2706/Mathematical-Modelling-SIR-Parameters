@@ -1,0 +1,91 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+# Parameters
+N = 100
+transmissibility = 0.8  #desired attack rate
+infectivity = 1      # Ability of infected to infect others
+decay_rate = 0.04
+susceptibility = 1      # Chance of susceptible getting infected
+contact_rate = 3          #(no of contacts per day)
+contact_duration = 0.25    #every contact meets for a quarter of a day
+gamma = 0.1428                # Average Recovery rate (no. of recoveries/day)
+delta_t = 0.01
+T = 30
+steps = int(T / delta_t)
+initial_state = (95, 5)
+num_paths = 5
+probability= 1-(np.power(1-(transmissibility * infectivity * susceptibility),contact_duration))
+# Calculate the effective beta (constant)
+effective_beta = (probability)*contact_rate # probability of getting an infection if contact is established
+
+# Function: Simulate one stochastic SIR path
+def simulate_stochastic_sir():
+    S, I = [initial_state[0]], [initial_state[1]]
+    current_infectivity = infectivity  # Start with initial infectivity
+    for t in range(steps):
+        s, i = S[-1], I[-1]
+
+        # Update infectivity with decay at each time step
+        current_infectivity *= np.exp(-decay_rate * delta_t)
+
+        # Calculate infection probability using the formula
+        infection_prob = effective_beta*s* i / N * delta_t
+        
+        # Recovery probability remains the same (as per your request)
+        recovery_prob = gamma * i * delta_t
+        no_change_prob = 1 - (infection_prob + recovery_prob)
+
+        # Normalize probabilities
+        probs = np.array([infection_prob, recovery_prob, no_change_prob])
+        probs = np.clip(probs, 0, 1)
+        probs = probs / np.sum(probs)
+
+        # Transition based on probabilities
+        transition = np.random.choice(['infection', 'recovery', 'none'], p=probs)
+        if transition == 'infection' and s > 0:
+            s -= 1
+            i += 1
+        elif transition == 'recovery' and i > 0:
+            i -= 1
+        S.append(s)
+        I.append(i)
+    return S, I
+
+# Function: Deterministic solution using Euler method
+def deterministic_sir():
+    S, I, R = [initial_state[0]], [initial_state[1]], [0]
+    for _ in range(steps):
+        s, i, r = S[-1], I[-1], R[-1]
+        ds = -effective_beta * s * i / N
+        di = effective_beta * s * i / N - gamma * i
+        dr = gamma * i
+        S.append(s + ds * delta_t)
+        I.append(i + di * delta_t)
+        R.append(r + dr * delta_t)
+    return S, I, R
+
+
+print(probability)
+print(effective_beta)
+print(effective_beta/gamma)
+# --- Plot ---
+time = np.linspace(0, T, steps + 1)
+plt.figure(figsize=(12, 6))
+
+# Stochastic paths
+for _ in range(num_paths):
+    S_stoch, I_stoch = simulate_stochastic_sir()
+    plt.plot(time, I_stoch, alpha=0.5, label='Stochastic I(t)')
+
+# Deterministic path
+S_det, I_det, R_det = deterministic_sir()
+plt.plot(time, I_det, color='black', linewidth=2, label='Deterministic I(t)')
+
+plt.title('Stochastic vs Deterministic SIR Model with Infectivity & Susceptibility')
+plt.xlabel('Time')
+plt.ylabel('Number of Infected Individuals')
+plt.legend()
+plt.grid(True)
+plt.tight_layout()
+plt.show()
